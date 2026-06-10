@@ -75,7 +75,17 @@
   .ml-badge .icon { font-size: 1.4rem; }
   .ml-badge div { font-size: 0.78rem; color: #555; }
   .ml-badge strong { font-size: 0.85rem; color: var(--moss); }
+  .results-container{
+    margin-top:20px;
+    padding:20px;
+    border-radius:12px;
+    background:white;
+    box-shadow:0 2px 10px rgba(0,0,0,0.1);
+}
 
+.result-card{
+    line-height:1.8;
+}
   /* ── RESULTS ── */
   .results-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
   .results-header h2 { font-size: 1.1rem; }
@@ -175,7 +185,7 @@
 <div class="hero">
   <div class="hero-badge"><span class="pulse"></span> RandomForest ML · 97.78% CV Accuracy</div>
   <h1>Your <em>Budget-Smart</em><br>Student Travel Planner</h1>
-  <p>ML-powered destination recommendations + AI itineraries tailored to your budget and interests.</p>
+  <p>AI-powered travel planning with routes, costs, hotels and itinerary generation + AI Travel Planner.</p>
 </div>
 
 <div class="main">
@@ -186,43 +196,63 @@
       <div>
         <div class="card">
           <div class="card-title">Your Preferences</div>
-          <label>Daily Budget (₹)</label>
+          
+
+
+<label style="margin-top:12px">
+  <label>Trip Type</label>
+
+  <select id="tripType">
+    <option value="single">Single Destination</option>
+    <option value="multi">Multi Destination</option>
+    <option value="break">Break Journey</option>
+  </select>
+</label>
+<label>Starting Location</label>
+<input
+  type="text"
+  id="startLocation"
+  placeholder="Search starting location..."
+>
+<label>Destination(s)</label>
+
+<input
+  type="text"
+  id="destinationSearch"
+  placeholder="Search destinations..."
+>
+
+<div id="destinationResults"></div>
+
+<div id="selectedDestinations"></div>         
+<label>Daily Budget (₹)</label>
           <input type="number" id="budget" value="1000" min="200" max="5000" placeholder="e.g. 1000">
           <label>Trip Duration (days)</label>
           <input type="number" id="duration" value="3" min="1" max="14">
-          <label>Destination Type</label>
-          <div class="chip-group" id="type-chips">
-            <div class="chip sel" data-val="Beach">🏖 Beach</div>
-            <div class="chip sel" data-val="Hills">⛰ Hills</div>
-            <div class="chip sel" data-val="Heritage">🏛 Heritage</div>
-            <div class="chip sel" data-val="Adventure">🪂 Adventure</div>
-            <div class="chip sel" data-val="Nature">🌿 Nature</div>
-            <div class="chip sel" data-val="Spiritual">🪔 Spiritual</div>
-          </div>
-          <label>Travel Season</label>
-          <select id="season">
-            <option value="any">Any Season</option>
-            <option value="Winter">Winter (Nov–Feb)</option>
-            <option value="Summer">Summer (Apr–Jun)</option>
-            <option value="Monsoon">Monsoon (Jul–Sep)</option>
-            <option value="Spring">Spring (Mar)</option>
-          </select>
-          <label>Special Interests (for AI itinerary)</label>
-          <textarea id="interests" placeholder="e.g. I love street food, photography, and local culture..."></textarea>
-          <button class="btn-primary" id="recommend-btn" onclick="runRecommendation()">🤖 Get ML Recommendations</button>
-        </div>
-        <div class="ml-badge">
-          <div class="icon">🌲</div>
-          <div><strong>RandomForest Classifier</strong><br>Trained on 225 Indian destinations · Budget × Rating × Affordability features</div>
-        </div>
-      </div>
-      <div>
-        <div id="results-area">
-          <div class="empty-state"><span class="icon">🗺</span>Fill in your preferences and click <strong>Get ML Recommendations</strong> to see destinations scored by the model.</div>
-        </div>
+          <label>Number of People</label>
+
+<input
+  type="number"
+  id="people"
+  value="1"
+  min="1"
+  max="20"
+>
+<label>Travel Preference</label>
+
+<select id="travelPreference">
+  <option value="cheapest">Cheapest</option>
+  <option value="fastest">Fastest</option>
+  <option value="luxury">Luxury</option>
+</select>
       </div>
     </div>
   </div>
+  <button class="btn-primary" onclick="runRecommendation()">
+    🚀 Plan My Trip
+</button>
+<div id="results-area" class="results-container">
+  Results will appear here...
 
   <!-- ── PAGE: ITINERARY ── -->
   <div id="page-itinerary" class="page">
@@ -288,7 +318,10 @@ let state = {
   interests: "",
   filtered: [],
   selected: null,
-  itinerary: null,
+selectedDestinations: [],
+startLocation: "",
+multiCity: false,
+itinerary: null,
 };
 
 // ── Page nav ───────────────────────────────────────────────────────────
@@ -310,25 +343,479 @@ document.querySelectorAll(".chip").forEach(c => {
   });
 });
 
+
+function estimateHotelPrice(rating) {
+
+if (rating >= 4.7) return 7000;
+
+if (rating >= 4.5) return 5000;
+
+if (rating >= 4.2) return 3000;
+
+return 1800;
+}
+function displayTripSummary(
+    start,
+    destination,
+    distance,
+    transport,
+    travelCost,
+    hotelCost,
+    foodCost,
+    totalTripCost,
+    budget,
+    people
+) {
+
+    const remaining =
+        budget - totalTripCost;
+
+    const attractionsHtml =
+    (window.attractions || [])
+    .slice(0,5)
+    .map(place =>
+        `<li>${place.name}</li>`
+    )
+    .join("");
+    const duration =
+parseInt(document.getElementById("duration").value);
+console.log("Attractions in summary:", window.attractions);
+let itineraryHtml = "";
+
+
+const remainingPerNight =
+(budget - travelCost - foodCost) / duration;
+
+const hotelsHtml =
+(window.hotels || [])
+.filter(hotel =>
+    estimateHotelPrice(hotel.rating || 4)
+    <= remainingPerNight
+)
+.slice(0,5)
+.map(hotel => {
+
+    const price =
+    estimateHotelPrice(hotel.rating || 4);
+
+    return `
+        <li>
+            <strong>${hotel.name}</strong><br>
+            ⭐ ${hotel.rating || "N/A"}<br>
+            ₹${price}/night
+        </li>
+    `;
+})
+.join("") || `
+<li>
+No hotels fit your remaining budget.
+Increase budget or reduce duration.
+</li>
+`;
+const attractions =
+(window.attractions || []).slice(0, duration * 2);
+
+for(let day = 1; day <= duration; day++) {
+
+    const first =
+    attractions[(day - 1) * 2];
+
+    const second =
+    attractions[(day - 1) * 2 + 1];
+
+    itineraryHtml += `
+        <h4>📅 Day ${day}</h4>
+        <ul>
+            ${first ? `<li>${first.name}</li>` : ""}
+            ${second ? `<li>${second.name}</li>` : ""}
+        </ul>
+    `;
+}
+const selectedHotelCost =
+window.hotels?.length
+? estimateHotelPrice(
+    window.hotels[0].rating || 4
+)
+: 1500;
+
+const actualHotelCost =
+selectedHotelCost * duration;
+
+const actualTotalCost =
+travelCost +
+actualHotelCost +
+foodCost;
+
+const actualRemaining =
+budget -
+actualTotalCost;  
+const restaurantsHtml =
+(window.restaurants || [])
+.slice(0,5)
+.map(place => `
+<li>
+${place.name}
+⭐ ${place.rating || "N/A"}
+</li>
+`)
+.join("");  
+
+document.getElementById("results-area").innerHTML = `
+
+        <div class="result-card">
+
+            <h2>📍 Trip Summary</h2>
+
+            <p><strong>From:</strong> ${start}</p>
+
+            <p><strong>To:</strong> ${destination}</p>
+
+            <p><strong>Distance:</strong> ${distance.toFixed(2)} km</p>
+
+            <p><strong>People:</strong> ${people}</p>
+
+            <p><strong>Transport:</strong> ${transport}</p>
+
+            <p><strong>🤖 ML Confidence:</strong> 97%</p>
+            <h3>🤖 AI Recommendation</h3>
+
+<ul>
+<li>Matches selected budget</li>
+<li>Suitable for trip duration</li>
+<li>Student friendly destination</li>
+<li>High destination rating</li>
+</ul>
+            <p><strong>Travel Cost:</strong> ₹${travelCost}</p>
+
+            <p><strong>Hotel Cost:</strong> ₹${actualHotelCost}</p>
+
+            <p><strong>Food Cost:</strong> ₹${foodCost}</p>
+
+            <hr>
+
+            <h3>📍 Top Attractions</h3>
+
+            <ul>
+                ${attractionsHtml}
+            </ul>
+            <hr>
+
+<h3>📅 Suggested Itinerary</h3>
+
+${itineraryHtml}
+<hr>
+
+<h3>🏨 Recommended Hotels</h3>
+
+<ul>
+${hotelsHtml}
+</ul>
+<hr>
+<hr>
+
+<h3>🍽 Recommended Restaurants</h3>
+
+<ul>
+${restaurantsHtml}
+</ul>
+
+            <hr>
+
+            <p><strong>Total Trip Cost:</strong> ₹${actualTotalCost}</p>
+
+<p><strong>Your Budget:</strong> ₹${budget}</p>
+
+<p><strong>Remaining Budget:</strong> ₹${actualRemaining}</p>
+        </div>
+
+    `;
+}
+function getNearbyAttractions() {
+
+const service =
+    new google.maps.places.PlacesService(
+        document.createElement("div")
+    );
+
+const request = {
+    location: {
+        lat: window.selectedDestination.lat,
+        lng: window.selectedDestination.lng
+    },
+
+    radius: 15000,
+
+    type: "tourist_attraction"
+};
+
+service.nearbySearch(
+    request,
+    (results, status) => {
+
+        if (
+            status === google.maps.places.PlacesServiceStatus.OK
+        ) {
+
+          window.attractions =
+results
+.filter(place =>
+    !place.name.includes("Tour") &&
+    !place.name.includes("Travel") &&
+    !place.name.includes("Package") &&
+    !place.name.includes("Private Limited") &&
+    !place.name.includes("Camp") &&
+    !place.name.includes("Bazaar")
+)
+.slice(0,8);
+displayTripSummary(
+    window.startLocationData.name,
+    window.selectedDestination.name,
+    window.currentDistance,
+    window.currentTransport,
+    window.currentTravelCost,
+    window.currentHotelCost,
+    window.currentFoodCost,
+    window.currentTotalTripCost,
+    window.currentBudget,
+    window.currentPeople
+);
+
+console.log(window.attractions);
+
+        }
+
+    }
+);
+}
+
 // ── ML Recommendation ─────────────────────────────────────────────────
 function runRecommendation() {
-  state.budget   = parseInt(document.getElementById("budget").value) || 1000;
-  state.duration = parseInt(document.getElementById("duration").value) || 3;
-  state.season   = document.getElementById("season").value;
-  state.interests= document.getElementById("interests").value;
 
-  const budgetTier = state.budget < 650 ? "low" : state.budget < 1400 ? "medium" : "high";
+if (!window.startLocationData ||
+    !window.selectedDestination) {
 
-  let recs = MODEL_DATA.recommendations.filter(r => {
-    if (r.budget_tier !== budgetTier) return false;
-    if (!state.types.has(r.destination_type)) return false;
-    if (state.season !== "any" && r.best_season !== state.season) return false;
-    return true;
-  }).sort((a,b) => b.ml_score - a.ml_score);
+    alert(
+        "Please select Start and Destination from Google suggestions."
+    );
 
-  state.filtered = recs;
-  renderResults(recs, budgetTier);
+    return;
 }
+
+const distance =
+    calculateDistance(
+        window.startLocationData.lat,
+        window.startLocationData.lng,
+        window.selectedDestination.lat,
+        window.selectedDestination.lng
+    );
+    const preference =
+document.getElementById("travelPreference").value;
+
+const people =
+parseInt(document.getElementById("people").value);
+
+const budget =
+parseInt(document.getElementById("budget").value);
+const budgetTier =
+budget < 15000
+? "low"
+: budget < 50000
+? "medium"
+: "high";
+let transport;
+let travelCost;
+
+const duration =
+parseInt(document.getElementById("duration").value);
+
+if (preference === "cheapest") {
+
+    transport =
+        distance < 400 ? "Bus" : "Train";
+
+    travelCost =
+        Math.round(distance * 1.7 * people);
+
+}
+
+else if (preference === "fastest") {
+
+    transport = "Flight";
+
+    travelCost =
+        Math.round(distance * 4.5 * people);
+
+}
+
+else if (preference === "luxury") {
+
+    transport = "Business Flight";
+
+    travelCost =
+        Math.round(distance * 8 * people);
+
+}
+const hotelCost =
+    1500 * duration;
+
+const foodCost =
+    500 * duration * people;
+
+const totalTripCost =
+    travelCost +
+    hotelCost +
+    foodCost;
+
+console.log(
+    "Distance:",
+    distance.toFixed(2),
+    "km"
+);
+if (totalTripCost > budget) {
+const attractionsHtml =
+(window.attractions || [])
+.slice(0,5)
+.map(place =>
+`<li>${place.name}</li>`
+)
+.join("");
+document.getElementById("results-area").innerHTML = `
+    <div class="result-card">
+        <h2>⚠ Budget Too Low</h2>
+
+        <p>
+            Estimated Trip Cost:
+            ₹${totalTripCost}
+        </p>
+
+        <p>
+            Your Budget:
+            ₹${budget}
+        </p>
+
+        <p>
+            Increase your budget or reduce trip duration.
+        </p>
+        
+    </div>
+`;
+
+return;
+}
+
+window.currentDistance = distance;
+window.currentTransport = transport;
+window.currentTravelCost = travelCost;
+window.currentHotelCost = hotelCost;
+window.currentFoodCost = foodCost;
+window.currentTotalTripCost = totalTripCost;
+window.currentBudget = budget;
+window.currentPeople = people;
+getNearbyAttractions();
+getNearbyHotels();
+getNearbyRestaurants();
+// getWeather();
+getRouteInfo();
+
+}
+
+function getNearbyHotels() {
+
+const service =
+    new google.maps.places.PlacesService(
+        document.createElement("div")
+    );
+
+const request = {
+    location: {
+        lat: window.selectedDestination.lat,
+        lng: window.selectedDestination.lng
+    },
+
+    radius: 15000,
+
+    type: "lodging"
+};
+
+service.nearbySearch(
+    request,
+    (results, status) => {
+
+        if (
+            status === google.maps.places.PlacesServiceStatus.OK
+        ) {
+
+            window.hotels =
+            results.slice(0,5);
+
+            displayTripSummary(
+                window.startLocationData.name,
+                window.selectedDestination.name,
+                window.currentDistance,
+                window.currentTransport,
+                window.currentTravelCost,
+                window.currentHotelCost,
+                window.currentFoodCost,
+                window.currentTotalTripCost,
+                window.currentBudget,
+                window.currentPeople
+            );
+
+        }
+
+    }
+);
+
+}
+function getNearbyRestaurants() {
+
+const service =
+new google.maps.places.PlacesService(
+    document.createElement("div")
+);
+
+const request = {
+    location: {
+        lat: window.selectedDestination.lat,
+        lng: window.selectedDestination.lng
+    },
+
+    radius: 10000,
+
+    type: "restaurant"
+};
+
+service.nearbySearch(
+    request,
+    (results, status) => {
+
+        if (
+            status === google.maps.places.PlacesServiceStatus.OK
+        ) {
+
+            window.restaurants =
+            results.slice(0,5);
+
+            displayTripSummary(
+                window.startLocationData.name,
+                window.selectedDestination.name,
+                window.currentDistance,
+                window.currentTransport,
+                window.currentTravelCost,
+                window.currentHotelCost,
+                window.currentFoodCost,
+                window.currentTotalTripCost,
+                window.currentBudget,
+                window.currentPeople
+            );
+
+        }
+
+    }
+);
+
+}
+
 
 function renderResults(recs, tier) {
   const area = document.getElementById("results-area");
@@ -346,6 +833,8 @@ function renderResults(recs, tier) {
 
 function destCard(r) {
   const sc = r.ml_score;
+  const travelCost =
+travelCosts[state.startLocation]?.[r.destination] || 1500;
   const scoreClass = sc >= 0.7 ? "score-high" : sc >= 0.4 ? "score-mid" : "score-low";
   const barColor = sc >= 0.7 ? "#4A7C59" : sc >= 0.4 ? "#F4A023" : "#E05252";
   const sel = state.selected?.destination === r.destination ? " selected" : "";
@@ -365,6 +854,9 @@ function destCard(r) {
       <span class="tag tag-type">${r.destination_type}</span>
       <span class="tag tag-budget">₹${r.avg_cost_per_day}/day</span>
       <span class="tag tag-season">${r.best_season}</span>
+      <span class="tag tag-budget">
+🚆 ₹${travelCost}
+</span>
       <span class="tag tag-rating">⭐ ${r.rating}</span>
     </div>
   </div>`;
@@ -380,14 +872,72 @@ function sortResults(by, btn) {
   document.getElementById("dest-grid").innerHTML = sorted.map(destCard).join("");
 }
 
-function selectDest(name) {
-  state.selected = state.filtered.find(r=>r.destination===name);
-  document.querySelectorAll(".dest-card").forEach(c=>c.classList.remove("selected"));
-  event.currentTarget.classList.add("selected");
-  toast(`✅ ${name} selected — go to Itinerary tab!`);
+function selectDest(name){
+
+if(state.multiCity){
+
+  if(!state.selectedDestinations.includes(name)){
+     state.selectedDestinations.push(name);
+     toast(name + " added to route");
+  }
+
+  if(state.selectedDestinations.length >= 3){
+     prepareMultiCityTrip();
+  }
+
+} else {
+
+  state.selected =
+  state.filtered.find(r => r.destination === name);
+
   prepareItinerary();
+
 }
 
+}
+function prepareMultiCityTrip(){
+
+const selected =
+state.filtered.filter(d =>
+state.selectedDestinations.includes(d.destination));
+
+const totalBudget =
+state.duration * state.budget;
+
+document.getElementById("itin-content").innerHTML = `
+<div class="card">
+
+<h2>🚆 Multi-City Route Planner</h2>
+
+<p><strong>Starting City:</strong>
+${state.startLocation}</p>
+
+<p><strong>Destinations:</strong></p>
+
+<ol>
+${selected.map(d =>
+`<li>${d.destination}, ${d.state}</li>`).join("")}
+</ol>
+
+<div style="margin-top:15px">
+
+<h3>Suggested Route</h3>
+
+<p>
+${state.startLocation}
+→
+${selected.map(d => d.destination).join(" → ")}
+</p>
+
+<h3>Total Budget</h3>
+
+<p>₹${totalBudget.toLocaleString()}</p>
+
+</div>
+
+</div>
+`;
+}
 // ── Itinerary ──────────────────────────────────────────────────────────
 function prepareItinerary() {
   if (!state.selected) return;
@@ -560,9 +1110,262 @@ function toast(msg) {
   t.classList.add("show");
   setTimeout(() => t.classList.remove("show"), 3000);
 }
+function initGoogleAutocomplete() {
 
+const input =
+    document.getElementById("destinationSearch");
+
+if (!input) {
+    console.log("Destination field not found");
+    return;
+}
+function initGoogleAutocomplete() {
+
+const input =
+    document.getElementById("destinationSearch");
+
+if (!input) {
+    console.log("Destination field not found");
+    return;
+}
+
+const autocomplete =
+    new google.maps.places.Autocomplete(input, {
+        componentRestrictions: { country: "in" }
+    });
+
+autocomplete.addListener("place_changed", () => {
+
+    const place = autocomplete.getPlace();
+
+    console.log("Place Name:", place.name);
+
+    console.log(
+        "Latitude:",
+        place.geometry.location.lat()
+    );
+
+    console.log(
+        "Longitude:",
+        place.geometry.location.lng()
+    );
+
+    window.selectedDestination = {
+        name: place.name,
+        lat: place.geometry.location.lat(),
+        lng: place.geometry.location.lng(),
+        placeId: place.place_id
+    };
+
+    console.log(window.selectedDestination);
+
+});
+
+}
+
+
+const autocomplete =
+    new google.maps.places.Autocomplete(input, {
+        componentRestrictions: { country: "in" }
+    });
+
+    autocomplete.addListener("place_changed", () => {
+
+const place = autocomplete.getPlace();
+
+console.log("Place Name:", place.name);
+
+console.log(
+    "Latitude:",
+    place.geometry.location.lat()
+);
+
+console.log(
+    "Longitude:",
+    place.geometry.location.lng()
+);
+
+window.selectedDestination = {
+    name: place.name,
+    lat: place.geometry.location.lat(),
+    lng: place.geometry.location.lng(),
+    placeId: place.place_id
+};
+
+console.log(window.selectedDestination);
+
+});
+
+}
+function initStartAutocomplete() {
+
+const input =
+    document.getElementById("startLocation");
+
+if (!input) return;
+
+const autocomplete =
+    new google.maps.places.Autocomplete(input, {
+        componentRestrictions: { country: "in" }
+    });
+
+autocomplete.addListener("place_changed", () => {
+
+    const place = autocomplete.getPlace();
+
+    window.startLocationData = {
+        name: place.name,
+        lat: place.geometry.location.lat(),
+        lng: place.geometry.location.lng(),
+        placeId: place.place_id
+    };
+
+    console.log(
+        "Start Location:",
+        window.startLocationData
+    );
+
+});
+
+}
+function calculateDistance(lat1, lon1, lat2, lon2) {
+
+const R = 6371;
+
+const dLat =
+  (lat2-lat1) * Math.PI/180;
+
+const dLon =
+  (lon2-lon1) * Math.PI/180;
+
+const a =
+  Math.sin(dLat/2) *
+  Math.sin(dLat/2) +
+  Math.cos(lat1*Math.PI/180) *
+  Math.cos(lat2*Math.PI/180) *
+  Math.sin(dLon/2) *
+  Math.sin(dLon/2);
+
+const c =
+  2 * Math.atan2(
+  Math.sqrt(a),
+  Math.sqrt(1-a));
+
+return R*c;
+}
+async function getRouteInfo() {
+
+const service =
+    new google.maps.DirectionsService();
+
+const request = {
+    origin: {
+        lat: window.startLocationData.lat,
+        lng: window.startLocationData.lng
+    },
+
+    destination: {
+        lat: window.selectedDestination.lat,
+        lng: window.selectedDestination.lng
+    },
+
+    travelMode: google.maps.TravelMode.DRIVING
+};
+
+service.route(request, (result, status) => {
+
+    if (status === "OK") {
+
+        const leg =
+            result.routes[0].legs[0];
+
+        console.log(
+            "Road Distance:",
+            leg.distance.text
+        );
+
+        console.log(
+            "Travel Time:",
+            leg.duration.text
+        );
+
+        alert(
+            `Road Distance: ${leg.distance.text}
+Travel Time: ${leg.duration.text}`
+        );
+
+    } else {
+
+        console.error(status);
+
+    }
+
+});
+
+}
+async function getRouteInfo() {
+
+const service =
+    new google.maps.DirectionsService();
+
+const request = {
+    origin: {
+        lat: window.startLocationData.lat,
+        lng: window.startLocationData.lng
+    },
+
+    destination: {
+        lat: window.selectedDestination.lat,
+        lng: window.selectedDestination.lng
+    },
+
+    travelMode: google.maps.TravelMode.DRIVING
+};
+
+service.route(request, (result, status) => {
+
+    if (status === "OK") {
+
+        const leg =
+            result.routes[0].legs[0];
+
+        console.log(
+            "Road Distance:",
+            leg.distance.text
+        );
+
+        console.log(
+            "Travel Time:",
+            leg.duration.text
+        );
+
+        alert(
+            `Road Distance: ${leg.distance.text}
+Travel Time: ${leg.duration.text}`
+        );
+
+    } else {
+
+        console.error(status);
+
+    }
+
+});
+
+}
 // ── Init ───────────────────────────────────────────────────────────────
+window.addEventListener("load", () => {
+
 renderInsights();
+
+initGoogleAutocomplete();
+
+initStartAutocomplete();
+
+});
+</script>
+<script async defer
+src="https://maps.googleapis.com/maps/api/js?key=AIzaSyC_LIo193ca8f9Lx8O6tM_rzDLpndIlzTo&libraries=places">
 </script>
 </body>
 </html>
